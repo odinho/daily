@@ -1,0 +1,274 @@
+#!/usr/bin/env python3
+
+import argparse
+import collections
+import datetime
+import os
+import re
+import shlex
+import subprocess
+import sys
+
+
+class Command(object):
+    def __init__(self, args):
+        pass
+
+
+class DailyFileCommand(Command):
+    DT_FORMAT = '%d-%b-%Y'
+
+    def __init__(self, args):
+        self.project = args.project
+        self.store_dir = os.path.join(args.store_dir, 'projects')
+
+    def run(self):
+        project_file = self.get_daily_file_path(self.project)
+        first_line = self.read_first_line(project_file)
+        date, last_time = self.get_last_log(first_line)
+        now = datetime.datetime.now()
+        today = now.strftime(self.DT_FORMAT)
+        if today != date:
+            entry = '{today}: {n:%H%M}-\n\n'.format(today=today, n=now)
+            self.prepend_entry_to_file(entry, project_file)
+            print("Started new day.  %s" % entry)
+        elif first_line[-1] == '-':
+            entry = first_line + '{n:%H%M}\n'.format(n=now)
+            self.prepend_entry_to_file(entry, project_file, 1)
+            open_file(project_file, line=2)
+            print("Logged out.  %s" % entry)
+        elif today == date:
+            entry = first_line + ' {n:%H%M}-\n'.format(n=now)
+            self.prepend_entry_to_file(entry, project_file, 1)
+            print("Logged in.  %s" % entry)
+        else:
+            print("Did nothing?  %s" % entry)
+
+    def get_daily_file_path(self, project):
+        project_loc = os.path.join(self.store_dir, project)
+        if not os.path.exists(project_loc):
+            open(project_loc, 'w').close()
+        return project_loc
+
+    def read_first_line(self, fn):
+        first_line = ''
+        with open(fn, 'rt+') as fp:
+            first_line = fp.readline()
+        return first_line.strip()
+
+    def get_last_log(self, first_line):
+        m = re.match(r'^(?P<date>[^:]+):.* (?P<last_time>[\d-]+)$', first_line)
+        if not m:
+            return None, None
+        return m.group('date'), m.group('last_time')
+
+    def prepend_entry_to_file(self, entry, fn, remove_lines=0):
+        lines = None
+        with open(fn, 'r') as fp:
+            lines = fp.readlines()
+        with open(fn, 'w') as fp:
+            fp.write(entry)
+            for line in lines[remove_lines:]:
+                fp.write(line)
+
+
+class DailyFileTimeCommand(DailyFileCommand):
+    normalize_to_time = 30*60
+
+    def run(self):
+        project_file = self.get_daily_file_path(self.project)
+        datetimes = self.get_date_times(project_file)
+        durations = collections.OrderedDict()
+        for dt in reversed(datetimes):
+            date, *times = dt.split()
+            d = datetime.datetime.strptime(date[:-1], self.DT_FORMAT)
+
+            durations[date] = []
+            for t in times:
+                start, end = t.split('-')
+                start_d = d.replace(hour=int(start[:2]), minute=int(start[2:]))
+                if not end:
+                    end_d = datetime.datetime.now().replace(microsecond=0)
+                else:
+                    end_d = d.replace(hour=int(end[:2]), minute=int(end[2:]))
+                if end_d < start_d:
+                    end_d += datetime.timedelta(days=1)
+                dur = end_d - start_d
+                halfhours, extra = divmod(dur.total_seconds(), self.normalize_to_time)
+                if extra > 60:
+                    halfhours += 1
+                durations[date].append({
+                    'dur': dur,
+                    'normalized': datetime.timedelta(seconds=halfhours*self.normalize_to_time),
+                })
+            print ("{} {} {:3.0f}m".format(date,
+                sum((d['normalized'] for d in durations[date]), datetime.timedelta()),
+                sum((d['dur'].total_seconds() for d in durations[date])) // 60,
+            ))
+        total = sum((item['dur'] for durs in durations.values() for item in durs),
+                    datetime.timedelta())
+        norm_total = sum((item['normalized'] for durs in durations.values() for item in durs),
+                         datetime.timedelta())
+        hours, seconds = divmod(int(total.total_seconds()), 60*60)
+        minutes, seconds = divmod(seconds, 60)
+
+        def to_human(total_seconds):
+            hours = total_seconds // (60*60)
+            workdays = hours / 7.5
+            workweeks = hours / (7.5*5)
+            return hours, workdays, workweeks
+        total_hours, workdays, workweeks = to_human(total.total_seconds())
+        norm_total_hours, norm_workdays, norm_workweeks = to_human(norm_total.total_seconds())
+        print("{p}: {h}h {m}m ({ww:.1f}w / {wd:.1f}d, normalized: {nh:.1f}h / {nww:.1f}w / {nwd:.1f}d)".format(
+            p=self.project, h=hours, m=minutes, ww=workweeks, wd=workdays,
+            nh=norm_total_hours, nwd=norm_workdays, nww=norm_workweeks))
+
+    def get_date_times(self, fn):
+        dt = []
+        d = re.compile(r'^[A-Za-z0-9-]+: [\d -]+\n?$')
+        with open(fn, 'rt') as fp:
+            for line in fp.readlines():
+                if d.match(line):
+                    dt.append(line.strip())
+        return dt
+
+
+class ListCommand(Command):
+    def run(self):
+        files = os.listdir('projects')
+        for fn in files:
+            with open(os.path.join('projects', fn), 'r') as fp:
+                line = fp.readline().strip()
+                print('{:10} {}'.format(fn, line))
+
+
+class ViewCommand(Command):
+    def __init__(self, args):
+        self.project = args.project
+
+    def run(self):
+        fn = os.path.join('projects', self.project)
+        subprocess.call(['head', '-10', fn])
+
+
+class EditCommand(ViewCommand):
+    def run(self):
+        fn = os.path.join('projects', self.project)
+        open_file(fn, line=2)
+
+
+class MorningCommand(Command):
+    def __init__(self, args):
+        self.view_arg = args.view
+
+    @classmethod
+    def log_loc(cls, when):
+        return os.path.join('logs', '%s.txt' % when)
+
+    def run(self):
+        now = datetime.datetime.now()
+        today = now.strftime('%Y%m%d')
+        fn = self.log_loc(today)
+        if self.view_arg:
+            self.view(fn)
+        else:
+            self.edit(fn, now)
+
+    def view(self, fn):
+        subprocess.call(['cat', fn])
+
+    def edit(self, fn, now):
+        with open(fn, 'a') as fp:
+            fp.write(now.strftime('--> %H:%M\n\n'))
+        open_file(fn, line=1000)
+        after = datetime.datetime.now()
+        with open(fn, 'a') as fp:
+            fp.write(after.strftime('<-- %H:%M\n'))
+
+
+class LogCommand(MorningCommand):
+    def __init__(self, args):
+        self.view_arg = args.view
+
+    @classmethod
+    def log_loc(cls, when):
+        return os.path.join('logs', '%s-log.txt' % when)
+
+    def edit(self, fn, now):
+        if not os.path.exists(fn):
+            open(fn, 'w').close()
+        try:
+            last_log = self.files()[1:2]
+        except IndexError:
+            last_log = None
+        open_file(fn, extra_files=last_log)
+
+    @classmethod
+    def files(cls):
+        files = sorted(os.listdir('logs'), reverse=True)
+        log_files = [
+            os.path.join('logs', fn) for fn in files
+            if fn.endswith('-log.txt')]
+        return log_files
+
+
+def init_dir():
+    store_dir = os.path.expanduser('~/.local/daily/')
+    if not os.path.exists(store_dir):
+        os.makedirs(store_dir, exist_ok=True)
+    os.chdir(store_dir)
+    os.makedirs('projects', exist_ok=True)
+    os.makedirs('logs', exist_ok=True)
+    return store_dir
+
+
+def open_file(fn, line=0, extra_files=None):
+    call = [os.environ.get('EDITOR', 'xdg-open'), fn]
+    if call[0] == 'vim' and line:
+        call.append('+%d' % line)
+    if call[0] == 'vim' and extra_files:
+        call.append('-o')
+        call.extend(extra_files)
+    subprocess.call(call)
+
+
+def git_commit():
+    arg = sys.argv[:]
+    arg[0] = 'daily'
+    cmd = ' '.join(shlex.quote(a) for a in arg)
+    subprocess.call('git add -A', shell=True)
+    subprocess.call(
+        ['git', 'commit', '-m', cmd],
+        stderr=subprocess.DEVNULL, stdout=subprocess.DEVNULL)
+
+
+if __name__ == '__main__':
+    parser = argparse.ArgumentParser()
+    parser.add_argument('-e', '--edit', action='store_true')
+    parser.add_argument('-v', '--view', action='store_true')
+    parser.add_argument('-t', '--time', action='store_true')
+    parser.add_argument('-m', '--morning', action='store_true')
+    parser.add_argument('-l', '--log', action='store_true')
+    parser.add_argument('project', nargs='?')
+    args = parser.parse_args()
+
+    args.store_dir = init_dir()
+    if args.morning:
+        cmd = MorningCommand(args)
+    elif args.log:
+        cmd = LogCommand(args)
+    elif not args.project:
+        cmd = ListCommand(args)
+    elif args.view:
+        cmd = ViewCommand(args)
+    elif args.edit:
+        cmd = EditCommand(args)
+    elif args.time:
+        cmd = DailyFileTimeCommand(args)
+    else:
+        cmd = DailyFileCommand(args)
+    cmd.run()
+
+    if not args.view and (args.edit or args.morning or
+                          args.log or args.project):
+        git_commit()
