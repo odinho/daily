@@ -107,10 +107,11 @@ class DailyFileTimeCommand(DailyFileCommand):
             else:
                 current_week['dur'] += normalized_day_dur
             current_week['num'] = date.isocalendar()[1]
+            note = dt['note'] or {6: "sat", 7: "sun"}.get(date.isoweekday(), "")
             print ("{} {} {:3.0f}m  {}".format(date_str,
                 str(normalized_day_dur).zfill(8),
                 sum((d['dur'].total_seconds() for d in durations[date_str])) // 60,
-                dt['note'] or "",
+                note,
             ))
         self._print_week(current_week);
         total = sum((item['dur'] for durs in durations.values() for item in durs),
