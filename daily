@@ -87,38 +87,30 @@ class DailyFileTimeCommand(DailyFileCommand):
         durations = collections.OrderedDict()
         current_week = {'num': -1, 'normalized': None}
         for dt in reversed(datetimes):
-            date, *times = dt.split()
-            d = datetime.datetime.strptime(date[:-1], self.DT_FORMAT)
-
-            durations[date] = []
-            for t in times:
-                start, end = t.split('-')
-                start_d = d.replace(hour=int(start[:2]), minute=int(start[2:]))
-                if not end:
-                    end_d = datetime.datetime.now().replace(microsecond=0)
-                else:
-                    end_d = d.replace(hour=int(end[:2]), minute=int(end[2:]))
-                if end_d < start_d:
-                    end_d += datetime.timedelta(days=1)
-                dur = end_d - start_d
+            date_str = dt['date_str']
+            date = dt['date']
+            durations[date_str] = []
+            for t in dt['times']:
+                dur = t['dur']
                 halfhours, extra = divmod(dur.total_seconds(), self.normalize_to_time)
                 if extra > 60:
                     halfhours += 1
-                durations[date].append({
+                durations[date_str].append({
                     'dur': dur,
                     'normalized': datetime.timedelta(seconds=halfhours*self.normalize_to_time),
                 })
-            normalized_day_dur = sum((d['normalized'] for d in durations[date]), datetime.timedelta())
-            if d.isocalendar()[1] != current_week['num']:
+            normalized_day_dur = sum((d['normalized'] for d in durations[date_str]), datetime.timedelta())
+            if date.isocalendar()[1] != current_week['num']:
                 if current_week['num'] != -1:
                     self._print_week(current_week);
                 current_week['dur'] = normalized_day_dur
             else:
                 current_week['dur'] += normalized_day_dur
-            current_week['num'] = d.isocalendar()[1]
-            print ("{} {} {:3.0f}m".format(date,
+            current_week['num'] = date.isocalendar()[1]
+            print ("{} {} {:3.0f}m  {}".format(date_str,
                 str(normalized_day_dur).zfill(8),
-                sum((d['dur'].total_seconds() for d in durations[date])) // 60,
+                sum((d['dur'].total_seconds() for d in durations[date_str])) // 60,
+                dt['note'] or "",
             ))
         self._print_week(current_week);
         total = sum((item['dur'] for durs in durations.values() for item in durs),
@@ -141,13 +133,44 @@ class DailyFileTimeCommand(DailyFileCommand):
 
     def get_date_times(self, fn):
         dt = []
-        d = re.compile(r'^[A-Za-z0-9-]+: [\d -]+\n?$')
+        d = re.compile(r'^[A-Za-z0-9-]+: [\d -]+( \(.*\))?\n?$')
         with open(fn, 'rt') as fp:
             for line in fp.readlines():
                 if d.match(line):
-                    dt.append(line.strip())
+                    dt.append(self.parse_date_line(line.strip()))
         return dt
 
+    def parse_date_line(self, line):
+        date, *times = line.split()
+        d = datetime.datetime.strptime(date[:-1], self.DT_FORMAT)
+        parsed_times = []
+        note = None
+        for i, t in enumerate(times):
+            if t.startswith('('):
+                # the rest of times is actually a note
+                note = (' '.join(times[i:])).strip('()')
+                break
+            start, end = t.split('-')
+            start_d = d.replace(hour=int(start[:2]), minute=int(start[2:]))
+            if not end:
+                end_d = datetime.datetime.now().replace(microsecond=0)
+            else:
+                end_d = d.replace(hour=int(end[:2]), minute=int(end[2:]))
+            if end_d < start_d:
+                end_d += datetime.timedelta(days=1)
+            dur = end_d - start_d
+            parsed_times.append({
+                'dur': dur,
+                'start_dt': start_d,
+                'end_dt': end_d,
+            })
+        return {
+            'line': line,
+            'date_str': date,
+            'date': d,
+            'times': parsed_times,
+            'note': note,
+        }
 
 class ListCommand(Command):
     def run(self):
