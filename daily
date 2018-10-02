@@ -75,17 +75,20 @@ class DailyFileCommand(Command):
 class DailyFileTimeCommand(DailyFileCommand):
     normalize_to_time = 30*60
 
-    @staticmethod
-    def _print_week(week):
-        print("week {:02}: {} hours".format(
-            week['num'],
-            week['dur'].total_seconds() // 60 / 60))
-
     def run(self):
         project_file = self.get_daily_file_path(self.project)
         datetimes = self.get_date_times(project_file)
         durations = collections.OrderedDict()
+        show_weeks = False
+        if len(datetimes) > 30:
+            week_duration_spread = datetimes[0]['date'] - datetimes[30]['date']
+            show_weeks = week_duration_spread.days < 90
         current_week = {'num': -1, 'normalized': None}
+        def print_week():
+            if show_weeks:
+                print("week {:02}: {} hours".format(
+                    current_week['num'],
+                    current_week['dur'].total_seconds() // 60 / 60))
         for dt in reversed(datetimes):
             date_str = dt['date_str']
             date = dt['date']
@@ -102,7 +105,7 @@ class DailyFileTimeCommand(DailyFileCommand):
             normalized_day_dur = sum((d['normalized'] for d in durations[date_str]), datetime.timedelta())
             if date.isocalendar()[1] != current_week['num']:
                 if current_week['num'] != -1:
-                    self._print_week(current_week);
+                    print_week();
                 current_week['dur'] = normalized_day_dur
             else:
                 current_week['dur'] += normalized_day_dur
@@ -113,7 +116,7 @@ class DailyFileTimeCommand(DailyFileCommand):
                 sum((d['dur'].total_seconds() for d in durations[date_str])) // 60,
                 note,
             ))
-        self._print_week(current_week);
+        print_week();
         total = sum((item['dur'] for durs in durations.values() for item in durs),
                     datetime.timedelta())
         norm_total = sum((item['normalized'] for durs in durations.values() for item in durs),
