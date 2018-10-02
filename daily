@@ -102,7 +102,7 @@ class DailyFileTimeCommand(DailyFileCommand):
                     'normalized': datetime.timedelta(seconds=halfhours*self.normalize_to_time),
                 })
             print ("{} {} {:3.0f}m".format(date,
-                sum((d['normalized'] for d in durations[date]), datetime.timedelta()),
+                str(sum((d['normalized'] for d in durations[date]), datetime.timedelta())).zfill(8),
                 sum((d['dur'].total_seconds() for d in durations[date])) // 60,
             ))
         total = sum((item['dur'] for durs in durations.values() for item in durs),
