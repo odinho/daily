@@ -75,10 +75,17 @@ class DailyFileCommand(Command):
 class DailyFileTimeCommand(DailyFileCommand):
     normalize_to_time = 30*60
 
+    @staticmethod
+    def _print_week(week):
+        print("week {:02}: {} hours".format(
+            week['num'],
+            week['dur'].total_seconds() // 60 / 60))
+
     def run(self):
         project_file = self.get_daily_file_path(self.project)
         datetimes = self.get_date_times(project_file)
         durations = collections.OrderedDict()
+        current_week = {'num': -1, 'normalized': None}
         for dt in reversed(datetimes):
             date, *times = dt.split()
             d = datetime.datetime.strptime(date[:-1], self.DT_FORMAT)
@@ -101,10 +108,19 @@ class DailyFileTimeCommand(DailyFileCommand):
                     'dur': dur,
                     'normalized': datetime.timedelta(seconds=halfhours*self.normalize_to_time),
                 })
+            normalized_day_dur = sum((d['normalized'] for d in durations[date]), datetime.timedelta())
+            if d.isocalendar()[1] != current_week['num']:
+                if current_week['num'] != -1:
+                    self._print_week(current_week);
+                current_week['dur'] = normalized_day_dur
+            else:
+                current_week['dur'] += normalized_day_dur
+            current_week['num'] = d.isocalendar()[1]
             print ("{} {} {:3.0f}m".format(date,
-                str(sum((d['normalized'] for d in durations[date]), datetime.timedelta())).zfill(8),
+                str(normalized_day_dur).zfill(8),
                 sum((d['dur'].total_seconds() for d in durations[date])) // 60,
             ))
+        self._print_week(current_week);
         total = sum((item['dur'] for durs in durations.values() for item in durs),
                     datetime.timedelta())
         norm_total = sum((item['normalized'] for durs in durations.values() for item in durs),
