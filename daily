@@ -19,7 +19,7 @@ class DailyFileCommand(Command):
     DT_FORMAT = '%d-%b-%Y'
 
     def __init__(self, args):
-        self.project = args.project
+        self.project = args.rest[0]
         self.store_dir = os.path.join(args.store_dir, 'projects')
 
     def run(self):
@@ -189,6 +189,7 @@ class DailyFileTimeCommand(DailyFileCommand):
             'note': note,
         }
 
+
 class ListCommand(Command):
     def run(self):
         files = os.listdir('projects')
@@ -198,9 +199,18 @@ class ListCommand(Command):
                 print('{:10} {}'.format(fn, line))
 
 
+class GrepCommand(Command):
+    def __init__(self, args):
+        self.search = args.rest
+
+    def run(self):
+        subprocess.call(['git', 'grep', ' '.join(self.search)])
+
+
+
 class ViewCommand(Command):
     def __init__(self, args):
-        self.project = args.project
+        self.project = args.rest[0]
 
     def run(self):
         fn = os.path.join('projects', self.project)
@@ -305,7 +315,8 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--time', action='store_true')
     parser.add_argument('-m', '--morning', action='store_true')
     parser.add_argument('-l', '--log', action='store_true')
-    parser.add_argument('project', nargs='?')
+    parser.add_argument('-g', '--grep', action='store_true')
+    parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
 
     args.store_dir = init_dir()
@@ -313,7 +324,7 @@ if __name__ == '__main__':
         cmd = MorningCommand(args)
     elif args.log:
         cmd = LogCommand(args)
-    elif not args.project:
+    elif not args.rest:
         cmd = ListCommand(args)
     elif args.view:
         cmd = ViewCommand(args)
@@ -321,10 +332,12 @@ if __name__ == '__main__':
         cmd = EditCommand(args)
     elif args.time:
         cmd = DailyFileTimeCommand(args)
+    elif args.grep:
+        cmd = GrepCommand(args)
     else:
         cmd = DailyFileCommand(args)
     cmd.run()
 
     if not args.view and (args.edit or args.morning or
-                          args.log or args.project):
+                          args.log or args.rest):
         git_commit()
