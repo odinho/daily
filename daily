@@ -79,16 +79,24 @@ class DailyFileTimeCommand(DailyFileCommand):
         project_file = self.get_daily_file_path(self.project)
         datetimes = self.get_date_times(project_file)
         durations = collections.OrderedDict()
+        over_hours = 0
         show_weeks = False
         if len(datetimes) > 30:
             week_duration_spread = datetimes[0]['date'] - datetimes[30]['date']
             show_weeks = week_duration_spread.days < 90
-        current_week = {'num': -1, 'normalized': None}
-        def print_week():
+        current_week = {'num': -1, 'dur': datetime.timedelta(0), 'work_hours': 0}
+        def finish_week():
             if show_weeks:
-                print("week {:02}: {} hours".format(
-                    current_week['num'],
-                    current_week['dur'].total_seconds() // 60 / 60))
+                print_week()
+            new_hours = over_hours + (current_week['dur'].total_seconds() // 60 // 60) - current_week['work_hours']
+            current_week['work_hours'] = 0
+            return new_hours
+        def print_week():
+            print("week {:02}: {} hours (of {} work hours)".format(
+                current_week['num'],
+                current_week['dur'].total_seconds() // 60 / 60,
+                current_week['work_hours'],
+            ))
         for dt in reversed(datetimes):
             date_str = dt['date_str']
             date = dt['date']
@@ -102,21 +110,23 @@ class DailyFileTimeCommand(DailyFileCommand):
                     'dur': dur,
                     'normalized': datetime.timedelta(seconds=halfhours*self.normalize_to_time),
                 })
+            note = dt['note'] or {6: "sat", 7: "sun"}.get(date.isoweekday(), "")
             normalized_day_dur = sum((d['normalized'] for d in durations[date_str]), datetime.timedelta())
             if date.isocalendar()[1] != current_week['num']:
                 if current_week['num'] != -1:
-                    print_week();
+                    over_hours = finish_week()
                 current_week['dur'] = normalized_day_dur
             else:
                 current_week['dur'] += normalized_day_dur
+            if note not in ["sat", "sun"]:
+                current_week['work_hours'] += 8.0
             current_week['num'] = date.isocalendar()[1]
-            note = dt['note'] or {6: "sat", 7: "sun"}.get(date.isoweekday(), "")
             print ("{} {} {:3.0f}m  {}".format(date_str,
                 str(normalized_day_dur).zfill(8),
                 sum((d['dur'].total_seconds() for d in durations[date_str])) // 60,
                 note,
             ))
-        print_week();
+        over_hours = finish_week()
         total = sum((item['dur'] for durs in durations.values() for item in durs),
                     datetime.timedelta())
         norm_total = sum((item['normalized'] for durs in durations.values() for item in durs),
@@ -131,13 +141,15 @@ class DailyFileTimeCommand(DailyFileCommand):
             return hours, workdays, workweeks
         total_hours, workdays, workweeks = to_human(total.total_seconds())
         norm_total_hours, norm_workdays, norm_workweeks = to_human(norm_total.total_seconds())
+        print("over hours", over_hours)
         print("{p}: {h}h {m}m ({ww:.1f}w / {wd:.1f}d, normalized: {nh:.1f}h / {nww:.1f}w / {nwd:.1f}d)".format(
             p=self.project, h=hours, m=minutes, ww=workweeks, wd=workdays,
             nh=norm_total_hours, nwd=norm_workdays, nww=norm_workweeks))
 
     def get_date_times(self, fn):
         dt = []
-        d = re.compile(r'^[A-Za-z0-9-]+: [\d -]+( \(.*\))?\n?$')
+        d = re.compile(r'^[A-Za-z0-9-]+:?( [\d -]+)?( \(.*\))?\n?$')
+        count = 0
         with open(fn, 'rt') as fp:
             for line in fp.readlines():
                 if d.match(line):
@@ -146,7 +158,8 @@ class DailyFileTimeCommand(DailyFileCommand):
 
     def parse_date_line(self, line):
         date, *times = line.split()
-        d = datetime.datetime.strptime(date[:-1], self.DT_FORMAT)
+        date = date.strip(':')
+        d = datetime.datetime.strptime(date, self.DT_FORMAT)
         parsed_times = []
         note = None
         for i, t in enumerate(times):
