@@ -204,7 +204,7 @@ class GrepCommand(Command):
         self.search = args.rest
 
     def run(self):
-        subprocess.call(['git', 'grep', ' '.join(self.search)])
+        subprocess.call(['git', 'grep', '-i', ' '.join(self.search)])
 
 
 
