@@ -207,6 +207,13 @@ class GrepCommand(Command):
         subprocess.call(['git', 'grep', '-i', ' '.join(self.search)])
 
 
+class OpenFileCommand(Command):
+    def __init__(self, args):
+        self.fn = args.rest
+
+    def run(self):
+        open_file(' '.join(self.fn))
+
 
 class ViewCommand(Command):
     def __init__(self, args):
@@ -316,6 +323,7 @@ if __name__ == '__main__':
     parser.add_argument('-m', '--morning', action='store_true')
     parser.add_argument('-l', '--log', action='store_true')
     parser.add_argument('-g', '--grep', action='store_true')
+    parser.add_argument('-o', '--open-file', action='store_true')
     parser.add_argument('rest', nargs='*')
     args = parser.parse_args()
 
@@ -334,6 +342,8 @@ if __name__ == '__main__':
         cmd = DailyFileTimeCommand(args)
     elif args.grep:
         cmd = GrepCommand(args)
+    elif args.open_file:
+        cmd = OpenFileCommand(args)
     else:
         cmd = DailyFileCommand(args)
     cmd.run()
