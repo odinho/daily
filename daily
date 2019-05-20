@@ -118,7 +118,7 @@ class DailyFileTimeCommand(DailyFileCommand):
                 current_week['dur'] = normalized_day_dur
             else:
                 current_week['dur'] += normalized_day_dur
-            if note not in ["sat", "sun"] and "vacation" not in note:
+            if note not in ["sat", "sun", "vacation", "sick"]:
                 current_week['work_hours'] += 8.0
             current_week['num'] = date.isocalendar()[1]
             print ("{} {} {:3.0f}m  {}".format(date_str,
