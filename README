@@ -1,0 +1,61 @@
+Daily
+-----
+
+Time keeping and a few other helpful-ish things.
+
+Not really meant to be useful for others, but WFM.
+
+First time
+----------
+
+- You need to set your EDITOR env var (some extra features if
+  that's "vim").
+- Normally you'd start your day with a new project, say "mom" if you're
+  working for your mom:
+
+  daily mom # will log you in
+  daily mom # when you're finished working, will open your editor
+- It will store its files in `~/.local/daily/` (since that makes sense
+  for Linux)
+- You can watch how much you've worked for mom by doing:
+  daily -t mom (or daily --time mom)
+- `daily -l` brings up your notepad
+- `daily -m` your morning file
+
+Your time file will probably look like this in the end:
+```
+$ daily --view mom
+
+07-May-2018: 1800-2352
++ mowed lawn
++ ate chocolate
+* moms cookies website
+
+06-May-2018: 1659-2300
+* moms cookies website
+
+26-Nov-2017: 2300-0005
+* started on moms cookies website
+```
+
+The format of what you write under each day can be what you
+want for now.
+
+Usage
+-----
+
+usage: daily [-h] [-e] [-v] [-t] [-m] [-l] [-g] [-o] [rest [rest ...]]
+
+positional arguments:
+  rest
+
+optional arguments:
+  -h, --help       show this help message and exit
+  -e, --edit
+  -v, --view
+  -t, --time
+  -m, --morning
+  -l, --log
+  -g, --grep
+  -o, --open-file
+
