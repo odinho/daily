@@ -19,7 +19,9 @@ First time
   for Linux)
 - You can watch how much you've worked for mom by doing:
   daily -t mom (or daily --time mom)
-- `daily -l` brings up your notepad
+- `daily -p mom` creates your plan file
+- `daily -e mom` opens the mom time project, and plan file if you have it
+- `daily -l` brings up your daily notepad
 - `daily -m` your morning file
 
 Your time file will probably look like this in the end:
@@ -56,6 +58,7 @@ optional arguments:
   -t, --time
   -m, --morning
   -l, --log
+  -p, --plan
   -g, --grep
   -o, --open-file
 

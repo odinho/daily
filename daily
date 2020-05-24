@@ -10,6 +10,12 @@ import subprocess
 import sys
 
 
+log_file = lambda day: os.path.join('logs', '%s-log.txt' % day)
+morning_file = lambda day: os.path.join('logs', '%s.txt' % day)
+plan_file = lambda project: os.path.join('projects', '%s.plan.txt' % project)
+time_file = lambda project: os.path.join('projects', '%s' % project)
+
+
 class Command(object):
     def __init__(self, args):
         pass
@@ -20,7 +26,6 @@ class DailyFileCommand(Command):
 
     def __init__(self, args):
         self.project = args.rest[0]
-        self.store_dir = os.path.join(args.store_dir, 'projects')
 
     def run(self):
         project_file = self.get_daily_file_path(self.project)
@@ -45,7 +50,7 @@ class DailyFileCommand(Command):
             print("Did nothing?  %s" % entry)
 
     def get_daily_file_path(self, project):
-        project_loc = os.path.join(self.store_dir, project)
+        project_loc = time_file(project)
         if not os.path.exists(project_loc):
             open(project_loc, 'w').close()
         return project_loc
@@ -194,6 +199,8 @@ class ListCommand(Command):
     def run(self):
         files = os.listdir('projects')
         for fn in files:
+            if fn.endswith('.txt'):
+                continue
             with open(os.path.join('projects', fn), 'r') as fp:
                 line = fp.readline().strip()
                 print('{:10} {}'.format(fn, line))
@@ -220,23 +227,25 @@ class ViewCommand(Command):
         self.project = args.rest[0]
 
     def run(self):
-        fn = os.path.join('projects', self.project)
-        subprocess.call(['head', '-10', fn])
+        subprocess.call(['head', '-10', time_file(self.project)])
 
 
 class EditCommand(ViewCommand):
     def run(self):
-        fn = os.path.join('projects', self.project)
-        open_file(fn, line=2)
+        fn = time_file(self.project)
+        plan = plan_file(self.project)
+        if os.path.exists(plan):
+            open_file(fn, line=2, extra_files=[plan])
+        else:
+            open_file(fn, line=2)
 
 
 class MorningCommand(Command):
     def __init__(self, args):
         self.view_arg = args.view
 
-    @classmethod
-    def log_loc(cls, when):
-        return os.path.join('logs', '%s.txt' % when)
+    def log_loc(self, when):
+        return morning_file(when)
 
     def run(self):
         now = datetime.datetime.now()
@@ -263,9 +272,8 @@ class LogCommand(MorningCommand):
     def __init__(self, args):
         self.view_arg = args.view
 
-    @classmethod
-    def log_loc(cls, when):
-        return os.path.join('logs', '%s-log.txt' % when)
+    def log_loc(self, when):
+        return log_file(when)
 
     def edit(self, fn, now):
         if not os.path.exists(fn):
@@ -285,6 +293,21 @@ class LogCommand(MorningCommand):
         return log_files
 
 
+class PlanCommand(MorningCommand):
+    def __init__(self, args):
+        self.project = args.rest[0]
+        self.view_arg = args.view
+
+    def log_loc(self, when):
+        return plan_file(self.project)
+
+    def edit(self, fn, now):
+        if not os.path.exists(fn):
+            with open(fn, 'a') as fp:
+                fp.write("Use this for your plan, todo-list or notes")
+        open_file(fn, extra_files=[time_file(self.project)])
+
+
 def init_dir():
     store_dir = os.path.expanduser('~/.local/daily/')
     if not os.path.exists(store_dir):
@@ -300,7 +323,7 @@ def open_file(fn, line=0, extra_files=None):
     if call[0] == 'vim' and line:
         call.append('+%d' % line)
     if call[0] == 'vim' and extra_files:
-        call.append('-o')
+        call.append('-O')
         call.extend(extra_files)
     subprocess.call(call)
 
@@ -322,6 +345,7 @@ if __name__ == '__main__':
     parser.add_argument('-t', '--time', action='store_true')
     parser.add_argument('-m', '--morning', action='store_true')
     parser.add_argument('-l', '--log', action='store_true')
+    parser.add_argument('-p', '--plan', action='store_true')
     parser.add_argument('-g', '--grep', action='store_true')
     parser.add_argument('-o', '--open-file', action='store_true')
     parser.add_argument('rest', nargs='*')
@@ -330,6 +354,8 @@ if __name__ == '__main__':
     args.store_dir = init_dir()
     if args.morning:
         cmd = MorningCommand(args)
+    elif args.plan:
+        cmd = PlanCommand(args)
     elif args.log:
         cmd = LogCommand(args)
     elif not args.rest:
