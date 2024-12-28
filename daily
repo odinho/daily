@@ -82,7 +82,17 @@ class DailyFileTimeCommand(DailyFileCommand):
 
     def run(self):
         project_file = self.get_daily_file_path(self.project)
-        datetimes = self.get_date_times(project_file)
+        sections = self.get_date_times(project_file)
+
+        for i, section in enumerate(reversed(sections)):
+            if i > 0:
+                print("--- (^- paid)\n")
+
+            current_week = {'num': -1, 'dur': datetime.timedelta(0), 'work_hours': 0}
+            sorted_dates = list(reversed(section))
+            self.process_section(sorted_dates)
+
+    def process_section(self, datetimes):
         durations = collections.OrderedDict()
         over_hours = 0
         show_weeks = False
@@ -102,7 +112,7 @@ class DailyFileTimeCommand(DailyFileCommand):
                 current_week['dur'].total_seconds() // 60 / 60,
                 current_week['work_hours'],
             ))
-        for dt in reversed(datetimes):
+        for dt in datetimes:
             date_str = dt['date_str']
             date = dt['date']
             durations[date_str] = []
@@ -146,20 +156,34 @@ class DailyFileTimeCommand(DailyFileCommand):
             return hours, workdays, workweeks
         total_hours, workdays, workweeks = to_human(total.total_seconds())
         norm_total_hours, norm_workdays, norm_workweeks = to_human(norm_total.total_seconds())
-        print("over hours", over_hours)
+        if show_weeks:
+            print("over hours", over_hours)
         print("{p}: {h}h {m}m ({ww:.1f}w / {wd:.1f}d, normalized: {nh:.1f}h / {nww:.1f}w / {nwd:.1f}d)".format(
             p=self.project, h=hours, m=minutes, ww=workweeks, wd=workdays,
             nh=norm_total_hours, nwd=norm_workdays, nww=norm_workweeks))
 
     def get_date_times(self, fn):
         dt = []
+        sections = []
+        current_section = []
         d = re.compile(r'^[A-Za-z0-9-]+:?( [\d -]+)?( \(.*\))?\n?$')
-        count = 0
+
         with open(fn, 'rt') as fp:
             for line in fp.readlines():
-                if d.match(line):
-                    dt.append(self.parse_date_line(line.strip()))
-        return dt
+                line = line.strip()
+                if line == '---':
+                    if current_section:
+                        sections.append(current_section)
+                        current_section = []
+                elif d.match(line):
+                    parsed = self.parse_date_line(line)
+                    if parsed:  # Only append if successfully parsed
+                        current_section.append(parsed)
+
+        if current_section:  # Don't forget the last section
+            sections.append(current_section)
+
+        return sections  # Return list of sections instead of flat list
 
     def parse_date_line(self, line):
         date, *times = line.split()
@@ -255,6 +279,8 @@ class MorningCommand(Command):
             self.view(fn)
         else:
             self.edit(fn, now)
+            if os.path.getsize(fn) == 0:
+                subprocess.call(['rm', fn], shell=True)
 
     def view(self, fn):
         subprocess.call(['cat', fn])

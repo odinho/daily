@@ -46,19 +46,40 @@ want for now.
 Usage
 -----
 
-usage: daily [-h] [-e] [-v] [-t] [-m] [-l] [-g] [-o] [rest [rest ...]]
+    usage: daily [-h] [-e] [-v] [-t] [-m] [-l] [-g] [-o] [rest [rest ...]]
 
-positional arguments:
-  rest
+    positional arguments:
+      rest
 
-optional arguments:
-  -h, --help       show this help message and exit
-  -e, --edit
-  -v, --view
-  -t, --time
-  -m, --morning
-  -l, --log
-  -p, --plan
-  -g, --grep
-  -o, --open-file
+    optional arguments:
+      -h, --help       show this help message and exit
+      -e, --edit
+      -v, --view
+      -t, --time
+      -m, --morning
+      -l, --log
+      -p, --plan
+      -g, --grep
+      -o, --open-file
 
+Reports
+-------
+
+Not a lot of reports, you have to write them yourself or just hack the
+script. But there is a time report that I use to count the hours to bill
+clients:
+
+```
+$ daily -t dad
+05-Apr-2017 03:00:00 146m
+06-Apr-2017 02:00:00 100m
+mom2: 4h 6m (0.1w / 0.5d, normalized: 5.0h / 0.1w / 0.7d)
+--- (^- paid)
+
+12-Mar-2024 01:00:00  60m
+dad: 1h 0m (0.0w / 0.1d, normalized: 1.0h / 0.0w / 0.1d)
+```
+
+You just write three hyphens `---` on its own line to delimit sections
+from eachother. Every section will get printed with its own summary line
+and the "(^- paid)" text to show why it is its own section.
