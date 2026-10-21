@@ -355,6 +355,11 @@ def open_file(fn, line=0, extra_files=None):
 
 
 def git_commit():
+    # Never stage files in an enclosing repository, such as the public code repo.
+    root = subprocess.run(
+        ['git', 'rev-parse', '--show-toplevel'], capture_output=True, text=True)
+    if root.returncode or os.path.realpath(root.stdout.strip()) != os.getcwd():
+        return
     arg = sys.argv[:]
     arg[0] = 'daily'
     cmd = ' '.join(shlex.quote(a) for a in arg)

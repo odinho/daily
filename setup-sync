@@ -1,0 +1,30 @@
+#!/usr/bin/env python3
+"""Link Daily's local storage to this checkout's ignored data directory."""
+
+from pathlib import Path
+
+
+def main():
+    data = Path(__file__).resolve().parent / 'data'
+    local = Path.home() / '.local' / 'daily'
+    if local.is_symlink():
+        if local.resolve() == data:
+            print(f'Already linked: {local} -> {data}')
+            return
+        raise SystemExit(f'Refusing to replace existing symlink: {local}')
+    if local.exists() and not local.is_dir():
+        raise SystemExit(f'Expected a directory: {local}')
+    if local.exists() and data.exists():
+        raise SystemExit(f'Both {local} and {data} exist. Merge them manually first.')
+    local.parent.mkdir(parents=True, exist_ok=True)
+    if local.exists():
+        # Keep the original intact if moving across filesystems would be needed.
+        local.rename(data)
+    else:
+        data.mkdir(parents=True, exist_ok=True)
+    local.symlink_to(data, target_is_directory=True)
+    print(f'Linked {local} -> {data}')
+
+
+if __name__ == '__main__':
+    main()
